@@ -1,0 +1,10 @@
+[package]
+name = "tadaa_lah"
+version = "0.0.1"
+authors = []
+
+[dependencies]
+
+
+[addresses]
+tadaa_lah = "0x8dc5596ec77296eda91193077a08a57928e6b586378bd8ed794305ee93bf142f"
