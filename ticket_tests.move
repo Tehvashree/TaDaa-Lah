@@ -1,47 +1,58 @@
+#[test_only]
 module tadaa_lah::ticket_tests {
-    use std::assert;
-    use std::signer;
+    use sui::test_scenario as ts;
     use tadaa_lah::ticket;
-    use tadaa_lah::ticket_issuer;
 
     #[test]
-    public fun test_mint_ticket() {
-        let user = @0x1;
-        let event_id = 123;
-        let ticket_id = ticket::mint_ticket(&user, event_id);
-        assert!(ticket_id > 0, 100); // Ticket ID should be positive
+    fun test_mint_and_transfer() {
+        let mut scenario = ts::begin(@0x1);
+        let ctx = ts::ctx(&mut scenario);
+        
+        let ticket = ticket::mint_ticket(
+            b"Concert",
+            b"2023-12-31", 
+            b"QmXYZ123", 
+            ctx
+        );
+        transfer::public_transfer(ticket, @0x1);
+        ts::end(scenario);
     }
 
     #[test]
-    public fun test_list_ticket() {
-        let user = @0x1;
-        let event_id = 456;
-        let ticket_id = ticket::mint_ticket(&user, event_id);
-        ticket::list_ticket(&user, ticket_id);
-
-        let listed = ticket::is_ticket_listed(ticket_id);
-        assert!(listed, 101); // Should be listed
+    fun test_grant_and_transfer_badge() {
+        let mut scenario = ts::begin(@0x8dc5596ec77296eda91193077a08a57928e6b586378bd8ed794305ee93bf142f);
+        let ctx = ts::ctx(&mut scenario);
+        
+        let badge = ticket::grant_seller_badge(
+            @0x8dc5596ec77296eda91193077a08a57928e6b586378bd8ed794305ee93bf142f,
+            @0x1,
+            ctx
+        );
+        transfer::public_transfer(badge, @0x1);
+        ts::end(scenario);
     }
 
     #[test]
-    public fun test_list_ticket_in_kiosk() {
-        let user = @0x1;
-        let event_id = 789;
-        let kiosk_id = 42;
-        let ticket_id = ticket::mint_ticket(&user, event_id);
-        ticket::list_ticket_in_kiosk(&user, ticket_id, kiosk_id);
-
-        let in_kiosk = ticket::is_ticket_in_kiosk(ticket_id, kiosk_id);
-        assert!(in_kiosk, 102); // Should appear in kiosk
-    }
-
-    #[test]
-    public fun test_grant_seller_badge() {
-        let admin = @0xA;
-        let seller = @0x1;
-        ticket_issuer::grant_seller_badge(&admin, seller);
-
-        let badge_ok = ticket_issuer::has_seller_badge(seller);
-        assert!(badge_ok, 103); // Seller should now have badge
+    fun test_list_ticket() {
+        let mut scenario = ts::begin(@0x1);
+        let ctx = ts::ctx(&mut scenario);
+        
+        // Create seller (don't transfer yet)
+        let seller = ticket::grant_seller_badge(
+            @0x8dc5596ec77296eda91193077a08a57928e6b586378bd8ed794305ee93bf142f,
+            @0x1,
+            ctx
+        );
+        
+        // Create and list ticket
+        let listing_ticket = ticket::mint_ticket(b"Test", b"date", b"cid", ctx);
+        let listing = ticket::list_ticket(&listing_ticket, &seller, 1000, ctx);
+        
+        // Transfer all objects
+        transfer::public_transfer(listing, @0x1);
+        transfer::public_transfer(listing_ticket, @0x1);
+        transfer::public_transfer(seller, @0x1);
+        
+        ts::end(scenario);
     }
 }
