@@ -1,12 +1,18 @@
+#[allow(unused_use, duplicate_alias)]
 module tadaa_lah::ticket {
-    // Cleaned imports (only what's actually needed)
-    use sui::balance;
     use sui::sui::SUI;
-    use sui::kiosk::{Self as KioskFramework, Kiosk, KioskOwnerCap};
+    use sui::coin::{Self, Coin};
+    use sui::kiosk::{Self as kiosk, Kiosk, KioskOwnerCap};
+    use sui::transfer;
+    use sui::tx_context::{Self, TxContext};
+    use sui::object::{Self, ID, UID};
+    use tadaa_lah::ticket_escrow;
 
     const ADMIN_ADDRESS: address = @0x8dc5596ec77296eda91193077a08a57928e6b586378bd8ed794305ee93bf142f;
+    const EWRONG_PAYMENT_AMOUNT: u64 = 0;
+    const ETICKET_ID_MISMATCH: u64 = 1;
+    const ESELLER_NOT_VERIFIED: u64 = 2;
 
-    /// Ticket NFT for events
     public struct Ticket has key, store {
         id: UID,
         event_name: vector<u8>,
@@ -15,14 +21,12 @@ module tadaa_lah::ticket {
         original_issuer_verified: bool,
     }
 
-    /// SellerProfile defines verified sellers
     public struct SellerProfile has key, store {
         id: UID,
         seller_address: address,
         verified_badge: bool,
     }
 
-    /// Listing metadata for resale
     public struct Listing has key, store {
         id: UID,
         ticket_id: ID,
@@ -30,7 +34,6 @@ module tadaa_lah::ticket {
         price: u64,
     }
 
-    /// Mint a new ticket
     public fun mint_ticket(
         event_name: vector<u8>,
         event_date: vector<u8>,
@@ -46,14 +49,13 @@ module tadaa_lah::ticket {
         }
     }
 
-    /// List a ticket for sale
     public fun list_ticket(
         ticket: &Ticket,
         seller_profile: &SellerProfile,
         price: u64,
         ctx: &mut TxContext
     ): Listing {
-        assert!(seller_profile.verified_badge, 0);
+        assert!(seller_profile.verified_badge, ESELLER_NOT_VERIFIED);
         Listing {
             id: object::new(ctx),
             ticket_id: object::id(ticket),
@@ -62,16 +64,44 @@ module tadaa_lah::ticket {
         }
     }
 
-    /// List ticket in a kiosk
-    public fun list_ticket_in_kiosk(
-        kiosk: &mut Kiosk,
-        cap: &KioskOwnerCap,
-        ticket: Ticket
+    public entry fun purchase_ticket(
+        listing: Listing,
+        ticket: Ticket,
+        payment: Coin<SUI>,
+        ctx: &mut TxContext
     ) {
-        KioskFramework::place(kiosk, cap, ticket);
+        assert!(coin::value(&payment) == listing.price, EWRONG_PAYMENT_AMOUNT);
+        assert!(object::id(&ticket) == listing.ticket_id, ETICKET_ID_MISMATCH);
+
+        let Listing {
+            id: listing_id,
+            ticket_id: _,
+            seller_address,
+            price: _
+        } = listing;
+        
+        object::delete(listing_id);
+
+        // Create escrow through the ticket_escrow module's create function
+        ticket_escrow::create(
+            seller_address,
+            tx_context::sender(ctx),
+            object::id(&ticket),
+            payment,
+            ctx
+        );
+
+        transfer::public_transfer(ticket, tx_context::sender(ctx));
     }
 
-    /// Grant seller badge (admin only)
+    public entry fun list_ticket_in_kiosk(
+        _kiosk: &mut Kiosk,
+        _cap: &KioskOwnerCap,
+        ticket: Ticket
+    ) {
+        kiosk::place(_kiosk, _cap, ticket);
+    }
+
     public fun grant_seller_badge(
         admin: address,
         seller_address: address,
