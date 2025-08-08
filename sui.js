@@ -1,11 +1,14 @@
-import { SuiClient,getFullnodeUrl } from '@mysten/sui.js/client';
+import { SuiClient, getFullnodeUrl } from '@mysten/sui.js/client';
 import { TransactionBlock } from '@mysten/sui.js/transactions';
 import QRCode from 'qrcode';
 
+// *** TESTNET CONFIGURATION ***
+const NETWORK = 'testnet'; // Change to 'mainnet' for production
 const client = new SuiClient({
-  url: getFullnodeUrl('testnet')
+  url: getFullnodeUrl(NETWORK)
 });
 
+// *** UPDATE THESE WITH YOUR DEPLOYED TESTNET CONTRACT INFO ***
 const PACKAGE_ID = '0xd0fbe18753601de0ad3de8afc237fce5ae12ecadc3dbd1f2757afe0ef3ad14e7';
 const ADMIN_ADDRESS = '0x8dc5596ec77296eda91193077a08a57928e6b586378bd8ed794305ee93bf142f';
 const ESCROW_ADMIN_CAP_ID = '0xdd4091063dfd4d9336fbcda97a22f1230a61d80d867c38b46152810476e1d1d7';
@@ -18,11 +21,99 @@ const OBJECT_TYPES = {
     ESCROW_ADMIN_CAP: `${PACKAGE_ID}::ticket_escrow::EscrowAdminCap`
 };
 
+// *** TESTNET HELPER FUNCTIONS ***
+
+// Check if we're running on testnet
+export const isTestnet = () => NETWORK === 'testnet';
+
+// Get faucet info for testing
+export const getTestnetInfo = () => {
+  if (!isTestnet()) return null;
+  
+  return {
+    network: 'Sui Testnet',
+    faucets: [
+      'https://stakely.io/faucet/sui-testnet-sui',
+      'https://faucet.triangleplatform.com/sui/testnet',
+      'Discord: #testnet-faucet channel'
+    ],
+    explorer: 'https://suiexplorer.com/?network=testnet',
+    rpcUrl: getFullnodeUrl('testnet')
+  };
+};
+
+// Check wallet balance (useful for testing)
+export const checkWalletBalance = async (walletProvider) => {
+  try {
+    const address = await walletProvider.getAddress();
+    const balance = await client.getBalance({ owner: address });
+    
+    console.log('💰 [TESTNET] Wallet Balance Check:');
+    console.log(`Address: ${address}`);
+    console.log(`Balance: ${balance.totalBalance} MIST (${convertMistToSui(balance.totalBalance)} SUI)`);
+    
+    if (isTestnet() && parseInt(balance.totalBalance) < 100000000) { // Less than 0.1 SUI
+      console.warn('⚠️ Low testnet balance! Get more tokens from faucet.');
+      const info = getTestnetInfo();
+      console.log('Faucets available:', info.faucets);
+    }
+    
+    return balance;
+  } catch (error) {
+    console.error('❌ Error checking balance:', error);
+    throw error;
+  }
+};
+
+// Testing version of transaction execution with better error handling
+export const executeTestTransaction = async (txb, walletProvider, description = 'Transaction') => {
+  try {
+    console.log(`🧪 [${NETWORK.toUpperCase()}] Executing: ${description}`);
+    
+    // Check balance first on testnet
+    if (isTestnet()) {
+      await checkWalletBalance(walletProvider);
+    }
+    
+    const response = await walletProvider.signAndExecuteTransactionBlock({
+      transactionBlock: txb,
+      options: {
+        showEffects: true,
+        showEvents: true,
+        showObjectChanges: true,
+      },
+    });
+    
+    console.log(`✅ [${NETWORK.toUpperCase()}] ${description} successful:`, response);
+    
+    // Show explorer link
+    const explorerUrl = isTestnet() 
+      ? `https://suiexplorer.com/?network=testnet/txblock/${response.digest}`
+      : `https://suiexplorer.com/txblock/${response.digest}`;
+    console.log(`🔍 View transaction: ${explorerUrl}`);
+    
+    return response;
+  } catch (error) {
+    console.error(`❌ [${NETWORK.toUpperCase()}] ${description} failed:`, error);
+    
+    if (error.message?.includes('Insufficient gas') && isTestnet()) {
+      console.log('💡 Get more testnet SUI from faucets:');
+      getTestnetInfo()?.faucets.forEach(faucet => console.log(`  • ${faucet}`));
+    }
+    
+    throw error;
+  }
+};
+
+// Enhanced error handling for testnet
 const handleSuiError = (error, operation) => {
-    console.error(`❌ ${operation} failed:`, error);
+    console.error(`❌ [${NETWORK.toUpperCase()}] ${operation} failed:`, error);
     
     if (error.message?.includes('Insufficient gas')) {
-        throw new Error('Insufficient SUI balance for gas fees');
+        const message = isTestnet() 
+            ? 'Insufficient testnet SUI for gas fees. Get more from faucet!' 
+            : 'Insufficient SUI balance for gas fees';
+        throw new Error(message);
     }
     if (error.message?.includes('Object not found')) {
         throw new Error('The requested item no longer exists');
@@ -46,14 +137,16 @@ const handleSuiError = (error, operation) => {
     throw new Error(error.message || `${operation} failed`);
 };
 
-//Minting &Listing Tickets
+// *** CORE BLOCKCHAIN FUNCTIONS ***
+
+//Minting & Listing Tickets
 export const mintTicket = async (eventName, eventDate, ipfsCid, walletProvider) => {
     if (!eventName?.trim() || !eventDate?.trim() || !ipfsCid?.trim()) {
         throw new Error('All ticket details are required');
     }
     
     try {
-        console.log('Minting Ticket for:', { eventName, eventDate, ipfsCid });
+        console.log(`🎫 [${NETWORK.toUpperCase()}] Minting Ticket:`, { eventName, eventDate, ipfsCid });
         const txb = new TransactionBlock();
 
         const ticket = txb.moveCall({
@@ -67,16 +160,7 @@ export const mintTicket = async (eventName, eventDate, ipfsCid, walletProvider) 
 
         txb.transferObjects([ticket], txb.pure(await walletProvider.getAddress()));
 
-        const response = await walletProvider.signAndExecuteTransactionBlock({
-            transactionBlock: txb,
-            options: {
-                showEffects: true,
-                showEvents: true,
-                showObjectChanges: true,
-            },
-        });
-
-        console.log('✅ Ticket minted successfully:', response);
+        const response = await executeTestTransaction(txb, walletProvider, 'Mint Ticket');
         return response;
     } catch (error) {
         handleSuiError(error, 'Ticket minting');
@@ -89,7 +173,7 @@ export const listTicket = async (ticketObjectId, sellerProfileId, price, walletP
     }
     
     try {
-        console.log('Creating listing for ticket:', { ticketObjectId, sellerProfileId, price });
+        console.log(`📋 [${NETWORK.toUpperCase()}] Creating listing:`, { ticketObjectId, sellerProfileId, price });
         const txb = new TransactionBlock();
 
         const listing = txb.moveCall({
@@ -103,16 +187,7 @@ export const listTicket = async (ticketObjectId, sellerProfileId, price, walletP
 
         txb.transferObjects([listing], txb.pure(await walletProvider.getAddress()));
 
-        const response = await walletProvider.signAndExecuteTransactionBlock({
-            transactionBlock: txb,
-            options: {
-                showEffects: true,
-                showEvents: true,
-                showObjectChanges: true,
-            },
-        });
-        
-        console.log('✅ List response:', response);
+        const response = await executeTestTransaction(txb, walletProvider, 'List Ticket');
         return response;
     } catch (error) {
         handleSuiError(error, 'Ticket listing');
@@ -120,15 +195,13 @@ export const listTicket = async (ticketObjectId, sellerProfileId, price, walletP
 };
 
 //Seller verification
-
-//Creates SellerProfile object
 export const grantSellerBadge = async (sellerAddress, walletProvider) => {
     if (!sellerAddress) {
         throw new Error('Seller address is required');
     }
     
     try {
-        console.log('🏅 Granting seller badge to:', sellerAddress);
+        console.log(`🏅 [${NETWORK.toUpperCase()}] Granting seller badge to:`, sellerAddress);
 
         const txb = new TransactionBlock();
 
@@ -142,16 +215,7 @@ export const grantSellerBadge = async (sellerAddress, walletProvider) => {
 
         txb.transferObjects([sellerProfile], txb.pure(sellerAddress));
 
-        const response = await walletProvider.signAndExecuteTransactionBlock({
-            transactionBlock: txb,
-            options: {
-                showEffects: true,
-                showEvents: true,
-                showObjectChanges: true,
-            },
-        });
-
-        console.log('✅ Badge grant response:', response);
+        const response = await executeTestTransaction(txb, walletProvider, 'Grant Seller Badge');
         return response;
     } catch (error) {
         handleSuiError(error, 'Seller badge granting');
@@ -165,7 +229,7 @@ export const purchaseTicket = async (listingId, ticketId, paymentAmount, walletP
     }
     
     try {
-        console.log('💰 Purchasing ticket:', { listingId, ticketId, paymentAmount });
+        console.log(`💰 [${NETWORK.toUpperCase()}] Purchasing ticket:`, { listingId, ticketId, paymentAmount });
 
         const txb = new TransactionBlock();
 
@@ -182,16 +246,7 @@ export const purchaseTicket = async (listingId, ticketId, paymentAmount, walletP
             ],
         });
 
-        const response = await walletProvider.signAndExecuteTransactionBlock({
-            transactionBlock: txb,
-            options: {
-                showEffects: true,
-                showEvents: true,
-                showObjectChanges: true,
-            },
-        });
-
-        console.log('✅ Purchase response:', response);
+        const response = await executeTestTransaction(txb, walletProvider, 'Purchase Ticket');
         return response;
     } catch (error) {
         handleSuiError(error, 'Ticket purchase');
@@ -205,7 +260,7 @@ export const confirmEscrow = async (escrowId, walletProvider) => {
     }
     
     try {
-        console.log('✅ Confirming escrow:', escrowId);
+        console.log(`✅ [${NETWORK.toUpperCase()}] Confirming escrow:`, escrowId);
 
         const txb = new TransactionBlock();
 
@@ -216,16 +271,7 @@ export const confirmEscrow = async (escrowId, walletProvider) => {
             ],
         });
 
-        const response = await walletProvider.signAndExecuteTransactionBlock({
-            transactionBlock: txb,
-            options: {
-                showEffects: true,
-                showEvents: true,
-                showObjectChanges: true,
-            },
-        });
-
-        console.log('✅ Escrow confirmed:', response);
+        const response = await executeTestTransaction(txb, walletProvider, 'Confirm Escrow');
         return response;
     } catch (error) {
         handleSuiError(error, 'Escrow confirmation');
@@ -239,7 +285,7 @@ export const refundEscrow = async (escrowId, adminWalletProvider) => {
     }
     
     try {
-        console.log('🔄 Refunding escrow:', escrowId);
+        console.log(`🔄 [${NETWORK.toUpperCase()}] Refunding escrow:`, escrowId);
 
         const txb = new TransactionBlock();
 
@@ -251,30 +297,23 @@ export const refundEscrow = async (escrowId, adminWalletProvider) => {
             ],
         });
 
-        const response = await adminWalletProvider.signAndExecuteTransactionBlock({
-            transactionBlock: txb,
-            options: {
-                showEffects: true,
-                showEvents: true,
-                showObjectChanges: true,
-            },
-        });
-
-        console.log('✅ Escrow refunded:', response);
+        const response = await executeTestTransaction(txb, adminWalletProvider, 'Refund Escrow');
         return response;
     } catch (error) {
         handleSuiError(error, 'Escrow refund');
     }
 };
 
-// QR Code Generation Functions
+// *** QR CODE FUNCTIONS ***
+
 export const generateTicketQRCode = async (ticketId, additionalData = {}) => {
     try {
         const qrData = {
             ticketId,
             platform: 'TadaaLah',
+            network: NETWORK, // Include network info
             timestamp: Date.now(),
-            packageId: PACKAGE_ID, // Include package ID for validation
+            packageId: PACKAGE_ID,
             ...additionalData
         };
         
@@ -291,11 +330,12 @@ export const generateTicketQRCode = async (ticketId, additionalData = {}) => {
             width: 256
         });
         
-        console.log('✅ QR Code generated for ticket:', ticketId);
+        console.log(`✅ [${NETWORK.toUpperCase()}] QR Code generated for ticket:`, ticketId);
         return {
             dataURL: qrCodeDataURL,
             rawData: qrString,
-            ticketId
+            ticketId,
+            network: NETWORK
         };
     } catch (error) {
         console.error('❌ QR Code generation failed:', error);
@@ -303,7 +343,6 @@ export const generateTicketQRCode = async (ticketId, additionalData = {}) => {
     }
 };
 
-//QR Code Validation Function
 export const validateQRCode = async (qrData) => {
     try {
         let parsedData;
@@ -320,6 +359,11 @@ export const validateQRCode = async (qrData) => {
             throw new Error('Invalid QR code: No ticket ID found');
         }
 
+        // Validate network compatibility
+        if (parsedData.network && parsedData.network !== NETWORK) {
+            throw new Error(`QR code is for ${parsedData.network} but app is connected to ${NETWORK}`);
+        }
+
         // Validate package ID if present
         if (parsedData.packageId && parsedData.packageId !== PACKAGE_ID) {
             throw new Error('Invalid QR code: Wrong platform or outdated ticket');
@@ -332,37 +376,39 @@ export const validateQRCode = async (qrData) => {
             throw new Error('Ticket not found or invalid');
         }
         
-        // Check if this ticket is still owned by someone (not burned/consumed)
         const validation = {
             valid: true,
             ticket: ticketData,
             scannedAt: new Date().toISOString(),
             platform: parsedData.platform || 'Unknown',
+            network: NETWORK,
             originalTimestamp: parsedData.originalTimestamp || parsedData.timestamp,
             isOriginalIssuer: ticketData.original_issuer_verified
         };
         
-        console.log('✅ QR Code validation successful:', validation);
+        console.log(`✅ [${NETWORK.toUpperCase()}] QR Code validation successful:`, validation);
         return validation;
         
     } catch (error) {
-        console.error('❌ QR Code validation failed:', error);
+        console.error(`❌ [${NETWORK.toUpperCase()}] QR Code validation failed:`, error);
         return {
             valid: false,
             error: error.message,
-            scannedAt: new Date().toISOString()
+            scannedAt: new Date().toISOString(),
+            network: NETWORK
         };
     }
 };
 
-//Data Fetching Functions
+// *** DATA FETCHING FUNCTIONS ***
+
 export const fetchUserSellerProfile = async (userAddress) => {
     if (!userAddress) {
         throw new Error('User address is required');
     }
     
     try {
-        console.log('👤 Fetching seller profile for:', userAddress);
+        console.log(`👤 [${NETWORK.toUpperCase()}] Fetching seller profile for:`, userAddress);
 
         const response = await client.getOwnedObjects({
             owner: userAddress,
@@ -393,7 +439,7 @@ export const fetchUserSellerProfile = async (userAddress) => {
 
 export const fetchActiveListings = async () => {
     try {
-        console.log('🛒 Fetching all active listings...');
+        console.log(`🛒 [${NETWORK.toUpperCase()}] Fetching all active listings...`);
 
         const response = await client.queryObjects({
             query: {
@@ -432,7 +478,7 @@ export const fetchActiveListings = async () => {
         // Filter out listings with failed ticket fetches
         const validListings = enrichedListings.filter(listing => listing.ticket !== null);
         
-        console.log('✅ Found', validListings.length, 'valid listings');
+        console.log(`✅ [${NETWORK.toUpperCase()}] Found`, validListings.length, 'valid listings');
         return validListings;
     } catch (error) {
         console.error('❌ Error fetching listings:', error);
@@ -446,7 +492,7 @@ export const fetchTicketById = async (ticketId) => {
     }
     
     try {
-        console.log('🎫 Fetching ticket:', ticketId);
+        console.log(`🎫 [${NETWORK.toUpperCase()}] Fetching ticket:`, ticketId);
 
         const response = await client.getObject({
             id: ticketId,
@@ -464,7 +510,7 @@ export const fetchTicketById = async (ticketId) => {
                 event_date: new TextDecoder().decode(new Uint8Array(fields.event_date)),
                 ipfs_cid: new TextDecoder().decode(new Uint8Array(fields.ipfs_cid)),
                 original_issuer_verified: fields.original_issuer_verified,
-                owner: response.data.owner?.AddressOwner || null // Get current owner
+                owner: response.data.owner?.AddressOwner || null
             };
         }
 
@@ -481,7 +527,7 @@ export const fetchUserPurchases = async (userAddress) => {
     }
     
     try {
-        console.log('🛒 Fetching purchases for user:', userAddress);
+        console.log(`🛒 [${NETWORK.toUpperCase()}] Fetching purchases for user:`, userAddress);
 
         // Get user's tickets
         const ticketsResponse = await client.getOwnedObjects({
@@ -534,7 +580,7 @@ export const fetchUserPurchases = async (userAddress) => {
             };
         });
 
-        console.log('✅ Found', purchases.length, 'purchases');
+        console.log(`✅ [${NETWORK.toUpperCase()}] Found`, purchases.length, 'purchases');
         return purchases;
     } catch (error) {
         console.error('❌ Error fetching user purchases:', error);
@@ -548,7 +594,7 @@ export const fetchUserListings = async (userAddress) => {
     }
     
     try {
-        console.log('📋 Fetching listings for user:', userAddress);
+        console.log(`📋 [${NETWORK.toUpperCase()}] Fetching listings for user:`, userAddress);
 
         const response = await client.getOwnedObjects({
             owner: userAddress,
@@ -590,14 +636,13 @@ export const fetchUserListings = async (userAddress) => {
     }
 };
 
-// Get escrow details
 export const fetchEscrowById = async (escrowId) => {
     if (!escrowId) {
         throw new Error('Escrow ID is required');
     }
     
     try {
-        console.log('💰 Fetching escrow:', escrowId);
+        console.log(`💰 [${NETWORK.toUpperCase()}] Fetching escrow:`, escrowId);
 
         const response = await client.getObject({
             id: escrowId,
@@ -626,7 +671,8 @@ export const fetchEscrowById = async (escrowId) => {
     }
 };
 
-//Utility Functions
+// *** UTILITY FUNCTIONS ***
+
 export const convertSuiToMist = (suiAmount) => {
     const amount = parseFloat(suiAmount);
     if (isNaN(amount) || amount < 0) {
@@ -667,35 +713,75 @@ export const extractObjectIdFromResponse = (response, objectType) => {
     return createdObjects[0]?.reference?.objectId;
 };
 
+// *** MOCK FUNCTIONS FOR TESTING ***
+
 //IPFS upload simulation
 export const uploadToIPFS = async (file) => {
     if (!file) {
         throw new Error('No file provided for IPFS upload');
     }
 
-    console.log('📁 Uploading file to IPFS:', file.name);
+    console.log(`📁 [${NETWORK.toUpperCase()}] Uploading file to IPFS:`, file.name);
 
     // Simulate IPFS upload with a delay
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    await new Promise(resolve => setTimeout(resolve, isTestnet() ? 1500 : 3000));
 
-    const fakeCid = `QmSimulated${Date.now()}${Math.random().toString(36).substr(2,9)}`;
-    console.log('✅ IPFS upload complete, CID:', fakeCid);
+    const fakeCid = `Qm${NETWORK}${Date.now()}${Math.random().toString(36).substr(2,9)}`;
+    console.log(`✅ [${NETWORK.toUpperCase()}] IPFS upload complete, CID:`, fakeCid);
     return fakeCid;
 };
 
 //demo Oracle verification
 export const verifyTicketWithOracle = async (ticketFile, confirmationNumber) => {
-    console.log('🔍 Verifying ticket with Ticketmaster API...');
+    console.log(`🔍 [${NETWORK.toUpperCase()}] Verifying ticket with Oracle API...`);
     console.log('📄 File:', ticketFile?.name);
     console.log('🔢 Confirmation Number:', confirmationNumber);
 
-    await new Promise(resolve => setTimeout(resolve, 3000));
-    const verified = Math.random() > 0.1; // 90% success rate for demo
+    // Faster verification on testnet for development
+    await new Promise(resolve => setTimeout(resolve, isTestnet() ? 2000 : 4000));
+    
+    // Higher success rate on testnet for easier testing
+    const successRate = isTestnet() ? 0.95 : 0.85;
+    const verified = Math.random() < successRate;
 
-    console.log('✅ Oracle verification result:', verified);
+    console.log(`✅ [${NETWORK.toUpperCase()}] Oracle verification result:`, verified);
     return verified;
 };
 
-export { PACKAGE_ID, OBJECT_TYPES, ESCROW_ADMIN_CAP_ID };
+// *** TESTING UTILITIES ***
 
+// Quick setup check for developers
+export const runTestnetSetup = async () => {
+    if (!isTestnet()) {
+        console.log('⚠️ Not on testnet - skipping setup check');
+        return;
+    }
+    
+    console.log('🧪 TESTNET SETUP CHECK');
+    console.log('====================');
+    
+    const info = getTestnetInfo();
+    console.log('Network:', info.network);
+    console.log('RPC URL:', info.rpcUrl);
+    console.log('Explorer:', info.explorer);
+    console.log('Package ID:', PACKAGE_ID);
+    console.log('Admin Address:', ADMIN_ADDRESS);
+    
+    console.log('\n📋 TODO for testing:');
+    console.log('1. Install Sui Wallet browser extension');
+    console.log('2. Switch wallet to testnet');
+    console.log('3. Get testnet SUI from faucets:');
+    info.faucets.forEach(faucet => console.log(`   • ${faucet}`));
+    console.log('4. Deploy your Move contracts to testnet');
+    console.log('5. Update PACKAGE_ID, ADMIN_ADDRESS, ESCROW_ADMIN_CAP_ID above');
+};
 
+// Export everything
+export { 
+    PACKAGE_ID, 
+    ADMIN_ADDRESS,
+    ESCROW_ADMIN_CAP_ID,
+    OBJECT_TYPES, 
+    NETWORK, 
+    client
+};
