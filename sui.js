@@ -21,6 +21,19 @@ const OBJECT_TYPES = {
     ESCROW_ADMIN_CAP: `${PACKAGE_ID}::ticket_escrow::EscrowAdminCap`
 };
 
+// *** SUIET WALLET KIT ADAPTER ***
+// This function adapts the `useWallet` hook from @suiet/wallet-kit
+// to the interface expected by the other functions in this file.
+export const connectSuietWallet = (wallet) => {
+  // wallet comes from useWallet() hook
+  return {
+    getAddress: () => wallet.account?.address,
+    signAndExecuteTransactionBlock: (params) => 
+      wallet.signAndExecuteTransactionBlock(params),
+    isConnected: () => wallet.connected
+  }
+}
+
 // *** TESTNET HELPER FUNCTIONS ***
 
 // Check if we're running on testnet
