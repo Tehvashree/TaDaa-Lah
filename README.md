@@ -1,41 +1,44 @@
-Tadaa-Lah is a decentralized ticketing platform built on the Sui blockchain. It enables secure ticket minting, listing, resale, and buyer protection using smart contracts and dynamic QR codes
+# **Tadaa-Lah**
+
+**Tadaa-Lah** is a decentralized ticketing platform built on the Sui blockchain. It enables secure ticket minting, listing, resale, and buyer protection using smart contracts and dynamic QR codes.
 
 The platform consists of the following modules:
 
-•	Profile & Seller Verification — Users can verify themselves as trusted sellers
+- **Profile & Seller Verification** — Users can verify themselves as trusted sellers  
+- **Event Listing & Ticket Selling** — Users can create and manage events, list tickets for sale, and set prices  
+- **Ticket QR Code System** — Buyers receive a unique, scannable QR code to enter events  
+- **Wallet Integration** — Connect and manage crypto wallet directly in the app  
 
-•	Event Listing & Ticket Selling — Users can create and manage events, list tickets for sale, and set prices
+---
 
-•	Ticket QR Code System — Buyers receive a unique, scannable QR code to enter events
+## **Installation**
 
-•	Wallet Integration — Connect and manage crypto wallet directly in the app
-
-Installation
-
-Make sure you have Node.js installed, then install the required dependencies
-
+Make sure you have **Node.js** installed, then install the required dependencies.
 
 Navigate to the frontend folder:
 
-cd frontend
+**cd frontend**
+
 
 Install dependencies:
 
-npm install
+**npm install**
 
 Running the App
 
 To start the development server:
 
-npm run dev
+**npm run dev**
 
 Open your browser and visit:
 
-http://localhost:5173 (or the URL shown in your terminal)
+**http://localhost:5173 (or the URL shown in your terminal)**
 
-After launching the app:
+---
 
-1. Seller Verification
+## **After launching the app:**
+
+**1. Seller Verification**
    
 •	Go to your Profile page
 
@@ -46,7 +49,7 @@ After launching the app:
 •	Once verified, your profile displays a Verified Seller badge
 
 
-2. Selling Tickets
+**2. Selling Tickets**
    
 •	Go to the Sell Ticket page
 
@@ -55,7 +58,7 @@ After launching the app:
 •	Submit and sign the transaction with your wallet
 
 
-3. Buying Tickets
+**3. Buying Tickets**
    
 •	Browse available events
 
@@ -64,7 +67,7 @@ After launching the app:
 •	Receive your ticket as a QR Code
 
 
-4. QR Ticket Screen
+**4. QR Ticket Screen**
    
 •	The ticket screen shows a unique QR code linked to their purchase
 
@@ -72,30 +75,33 @@ After launching the app:
 
 •	The QR code contains all necessary details for verifying ownership and validity
 
+---
 
-Features
+## **Features**
 
-•	On-Chain Seller Verification – Protects buyers by ensuring sellers are legitimate
+•  **On-Chain Seller Verification** – Protects buyers by ensuring sellers are legitimate
 
-•	Decentralized Ticket Management – Tickets are stored securely on the blockchain
+•	**Decentralized Ticket Managemen**t – Tickets are stored securely on the blockchain
 
-•	QR Code Verification – Prevents duplicate or fake tickets
+•	**QR Code Verification** – Prevents duplicate or fake tickets
 
-•	Wallet-Based Payments – Secure and trustless transactions
+•	**Wallet-Based Payments** – Secure and trustless transactions
 
+---
 
-Tech Stack
+## **Tech Stack**
 
-•	Frontend: React
+•	**Frontend**: React
 
-•	Blockchain: Sui Move Smart Contracts
+•	**Blockchain**: Sui Move Smart Contracts
 
-•	Wallet: Sui Wallet Integration
+•	**Wallet**: Sui Wallet Integration
 
-•	UI: Figma
+•	**UI**: Figma
 
+---
 
-How to Use
+## **How to Use**
 
 1.	Log in with Google (zkLogin)
    
@@ -108,9 +114,10 @@ How to Use
 5.	Buy/Sell tickets securely
     
 6.	Show QR codes at the event gate
-    
 
-Security & Anti-Fraud Measures
+---
+
+## **Security & Anti-Fraud Measures**
 
 •	Blockchain-based seller verification
 
